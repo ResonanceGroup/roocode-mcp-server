@@ -3,54 +3,45 @@ import * as vscode from 'vscode';
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Server } from 'http';
-import { Request, Response } from 'express';
-import { registerFileTools, FileListingCallback } from './tools/file-tools';
-import { registerEditTools } from './tools/edit-tools';
-import { registerShellTools } from './tools/shell-tools';
-import { registerDiagnosticsTools } from './tools/diagnostics-tools';
-import { registerSymbolTools } from './tools/symbol-tools';
 import { logger } from './utils/logger';
+import { registerTaskManagementTools } from './tools/task-management-tools';
+import { registerConfigurationTools } from './tools/configuration-tools';
+import { registerProfileManagementTools } from './tools/profile-management-tools';
+import { EventStreamingServer } from './tools/event-streaming-server';
 
 export interface ToolConfiguration {
-    file: boolean;
-    edit: boolean;
-    shell: boolean;
-    diagnostics: boolean;
-    symbol: boolean;
+    roocode: boolean;
 }
 
 export class MCPServer {
     private server: McpServer;
-    private transport: StreamableHTTPServerTransport;
     private app: express.Application;
     private httpServer?: Server;
     private port: number;
     private host: string;
-    private fileListingCallback?: FileListingCallback;
-    private terminal?: vscode.Terminal;
     private toolConfig: ToolConfiguration;
+    private eventStreamingServer: EventStreamingServer;
+    private transports: Map<string, StreamableHTTPServerTransport>;
+    private sessionIdGenerator: () => string;
 
-    public setFileListingCallback(callback: FileListingCallback) {
-        this.fileListingCallback = callback;
-    }
-
-    constructor(port: number = 3000, host: string = '127.0.0.1', terminal?: vscode.Terminal, toolConfig?: ToolConfiguration) {
+    constructor(port: number = 4000, host: string = '0.0.0.0', toolConfig?: ToolConfiguration) {
         this.port = port;
         this.host = host;
-        this.terminal = terminal;
         this.toolConfig = toolConfig || {
-            file: true,
-            edit: true,
-            shell: true,
-            diagnostics: true,
-            symbol: true
+            roocode: true
         };
         this.app = express();
-        this.app.use(express.json());
+        
+        // Don't use express.json() - let StreamableHTTPServerTransport handle body parsing
+        // The transport needs access to the raw request stream
+        this.app.use(express.raw({ type: 'application/json', limit: '10mb' }));
+
+        // Initialize event streaming server
+        this.eventStreamingServer = new EventStreamingServer();
 
         // Initialize MCP Server
         this.server = new McpServer({
-            name: "vscode-mcp-server",
+            name: "roocode-mcp-server",
             version: "1.0.0",
         }, {
             capabilities: {
@@ -61,71 +52,139 @@ export class MCPServer {
             }
         });
 
-        // Initialize transport
-        this.transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined,
-        });
+        // Initialize session management
+        this.transports = new Map<string, StreamableHTTPServerTransport>();
+        this.sessionIdGenerator = () => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        // Note: setupTools() is no longer called here
         this.setupRoutes();
         this.setupEventHandlers();
     }
-    
+
     public setupTools(): void {
-        // Register tools from the tools module based on configuration
-        if (this.fileListingCallback) {
-            logger.info(`Setting up MCP tools with configuration: ${JSON.stringify(this.toolConfig)}`);
-            
-            // Register file tools if enabled
-            if (this.toolConfig.file) {
-                registerFileTools(this.server, this.fileListingCallback);
-                logger.info('MCP file tools registered successfully');
-            } else {
-                logger.info('MCP file tools disabled by configuration');
-            }
-            
-            // Register edit tools if enabled
-            if (this.toolConfig.edit) {
-                registerEditTools(this.server);
-                logger.info('MCP edit tools registered successfully');
-            } else {
-                logger.info('MCP edit tools disabled by configuration');
-            }
-            
-            // Register shell tools if enabled
-            if (this.toolConfig.shell) {
-                registerShellTools(this.server, this.terminal);
-                logger.info('MCP shell tools registered successfully');
-            } else {
-                logger.info('MCP shell tools disabled by configuration');
-            }
-            
-            // Register diagnostics tools if enabled
-            if (this.toolConfig.diagnostics) {
-                registerDiagnosticsTools(this.server);
-                logger.info('MCP diagnostics tools registered successfully');
-            } else {
-                logger.info('MCP diagnostics tools disabled by configuration');
-            }
-            
-            // Register symbol tools if enabled
-            if (this.toolConfig.symbol) {
-                registerSymbolTools(this.server);
-                logger.info('MCP symbol tools registered successfully');
-            } else {
-                logger.info('MCP symbol tools disabled by configuration');
-            }
+        logger.info(`Setting up RooCode MCP tools with configuration: ${JSON.stringify(this.toolConfig)}`);
+
+        // Register RooCode tools if enabled
+        if (this.toolConfig.roocode) {
+            registerTaskManagementTools(this.server);
+            registerConfigurationTools(this.server);
+            registerProfileManagementTools(this.server);
+            logger.info('RooCode MCP tools registered successfully');
         } else {
-            logger.warn('File listing callback not set during tools setup');
+            logger.info('RooCode MCP tools disabled by configuration');
         }
     }
 
     private setupRoutes(): void {
-        // Handle POST requests for client-to-server communication
-        this.app.post('/mcp', async (req, res) => {
-            logger.info(`Request received: ${req.method} ${req.url}`);
+        // Handle all MCP requests (POST for RPC, GET for SSE)
+        this.app.all('/mcp', async (req, res) => {
+            logger.info(`MCP Request received: ${req.method} ${req.url}`);
+            
+            // Handle CORS preflight
+            if (req.method === 'OPTIONS') {
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+                res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, x-session-id');
+                res.status(204).end();
+                return;
+            }
+
             try {
-                await this.transport.handleRequest(req, res, req.body);
+                // Get session ID from header (for existing sessions) or generate new one
+                let sessionId = req.headers['x-session-id'] as string;
+                
+                // For POST requests, check if this is an initialize
+                if (req.method === 'POST') {
+                    const isInitialize = req.body &&
+                        typeof req.body === 'object' &&
+                        req.body.method === 'initialize';
+                    
+                    if (isInitialize) {
+                        // Generate new session ID for initialize
+                        sessionId = this.sessionIdGenerator();
+                        logger.info(`Initialize request received - creating new session: ${sessionId}`);
+                        
+                        // Create new transport for this session
+                        const transport = new StreamableHTTPServerTransport({
+                            sessionIdGenerator: () => sessionId
+                        });
+                        
+                        // Set up session cleanup
+                        const originalClose = transport.close.bind(transport);
+                        transport.close = async () => {
+                            logger.info(`Session closed: ${sessionId}`);
+                            this.transports.delete(sessionId);
+                            return originalClose();
+                        };
+                        
+                        // Connect the transport to the MCP server
+                        await this.server.connect(transport);
+                        this.transports.set(sessionId, transport);
+                        
+                        // Set session ID header for client
+                        res.setHeader('x-session-id', sessionId);
+                        
+                        // Handle the initialize request - parse body if it's a Buffer
+                        logger.info(`Processing initialize request for session: ${sessionId}`);
+                        const body = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : req.body;
+                        await transport.handleRequest(req, res, body);
+                        return;
+                    }
+                    
+                    // For non-initialize POST, require session ID
+                    if (!sessionId || !this.transports.has(sessionId)) {
+                        logger.warn(`POST request without valid session ID: ${sessionId}`);
+                        res.status(400).json({
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32000,
+                                message: 'Invalid session - must initialize first'
+                            },
+                            id: req.body?.id ?? null
+                        });
+                        return;
+                    }
+                    
+                    // Handle regular RPC request
+                    const transport = this.transports.get(sessionId)!;
+                    res.setHeader('x-session-id', sessionId);
+                    logger.info(`Handling RPC request for session: ${sessionId}`);
+                    const body = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : req.body;
+                    await transport.handleRequest(req, res, body);
+                    return;
+                }
+                
+                // For GET (SSE), require valid session
+                if (req.method === 'GET') {
+                    if (!sessionId || !this.transports.has(sessionId)) {
+                        logger.warn(`SSE request without valid session ID: ${sessionId}`);
+                        res.status(400).json({
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32000,
+                                message: 'Invalid session - must initialize first'
+                            },
+                            id: null
+                        });
+                        return;
+                    }
+                    
+                    // Handle SSE request
+                    const transport = this.transports.get(sessionId)!;
+                    res.setHeader('x-session-id', sessionId);
+                    logger.info(`Handling SSE request for session: ${sessionId}`);
+                    await transport.handleRequest(req, res, undefined);
+                    return;
+                }
+                
+                // Unsupported method
+                res.status(405).json({
+                    jsonrpc: '2.0',
+                    error: {
+                        code: -32000,
+                        message: 'Method not allowed'
+                    },
+                    id: null
+                });
             } catch (error) {
                 logger.error(`Error handling MCP request: ${error instanceof Error ? error.message : String(error)}`);
                 if (!res.headersSent) {
@@ -139,59 +198,6 @@ export class MCPServer {
                     });
                 }
             }
-        });
-
-        // Handle SSE endpoint for server-to-client streaming
-        this.app.get('/mcp/sse', async (req, res) => {
-            logger.info('Received SSE connection request');
-            try {
-                await this.transport.handleRequest(req, res, undefined);
-            } catch (error) {
-                logger.error(`Error handling SSE request: ${error instanceof Error ? error.message : String(error)}`);
-                if (!res.headersSent) {
-                    res.status(500).json({
-                        jsonrpc: '2.0',
-                        error: {
-                            code: -32603,
-                            message: 'Internal server error',
-                        },
-                        id: null,
-                    });
-                }
-            }
-        });
-
-        // Handle unsupported methods
-        this.app.get('/mcp', async (req, res) => {
-            logger.info('Received GET MCP request');
-            res.writeHead(405).end(JSON.stringify({
-                jsonrpc: "2.0",
-                error: {
-                    code: -32000,
-                    message: "Method not allowed."
-                },
-                id: null
-            }));
-        });
-
-        this.app.delete('/mcp', async (req, res) => {
-            logger.info('Received DELETE MCP request');
-            res.writeHead(405).end(JSON.stringify({
-                jsonrpc: "2.0",
-                error: {
-                    code: -32000,
-                    message: "Method not allowed."
-                },
-                id: null
-            }));
-        });
-
-        // Handle OPTIONS requests for CORS
-        this.app.options('/mcp', (req, res) => {
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-            res.status(204).end();
         });
     }
 
@@ -217,12 +223,8 @@ export class MCPServer {
             logger.info('[MCPServer.start] Starting MCP server');
             const startTime = Date.now();
 
-            // Connect transport before starting server
-            logger.info('[MCPServer.start] Connecting transport');
-            const transportConnectStart = Date.now();
-            await this.server.connect(this.transport);
-            const transportConnectTime = Date.now() - transportConnectStart;
-            logger.info(`[MCPServer.start] Transport connected (took ${transportConnectTime}ms)`);
+            // No need to connect transport at startup - transports are created per session
+            logger.info('[MCPServer.start] Server ready for sessions');
 
             // Start HTTP server
             logger.info('[MCPServer.start] Starting HTTP server');
@@ -286,7 +288,16 @@ export class MCPServer {
             // Rest of the shutdown process...
             logger.info('[MCPServer.stop] Closing transport');
             const transportCloseStart = Date.now();
-            await this.transport.close();
+            // Close all transports
+            for (const [sessionId, transport] of this.transports) {
+                try {
+                    await transport.close();
+                    logger.info(`[MCPServer.stop] Transport closed for session ${sessionId}`);
+                } catch (error) {
+                    logger.error(`[MCPServer.stop] Error closing transport for session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+            this.transports.clear();
             const transportCloseTime = Date.now() - transportCloseStart;
             logger.info(`[MCPServer.stop] Transport closed (took ${transportCloseTime}ms)`);
             

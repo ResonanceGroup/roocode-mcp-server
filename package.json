@@ -1,11 +1,11 @@
 {
-  "name": "vscode-mcp-server",
+  "name": "roocode-mcp-server",
   "icon": "media/logo.png",
-  "displayName": "vscode-mcp-server",
-  "description": "VS Code as a MCP server",
+  "displayName": "RooCode MCP Server",
+  "description": "MCP server to allow remote control of a running RooCode instance within VSCode",
   "version": "0.3.1",
-  "repository": "https://github.com/juehang/vscode-mcp-server",
-  "publisher": "JuehangQin",
+  "repository": "https://github.com/ResonanceGroup/roocode-mcp-server",
+  "publisher": "ResonanceGroup",
   "license": "MIT",
   "engines": {
     "vscode": "^1.99.0"
@@ -19,72 +19,48 @@
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
-      "title": "MCP Server",
+      "title": "RooCode MCP Server",
       "properties": {
-        "vscode-mcp-server.port": {
+        "roocode-mcp-server.port": {
           "type": "number",
-          "default": 3000,
+          "default": 4000,
           "minimum": 1024,
           "maximum": 65535,
-          "description": "The port number for the MCP server"
+          "description": "The port number for the RooCode MCP server"
         },
-        "vscode-mcp-server.host": {
+        "roocode-mcp-server.host": {
           "type": "string",
-          "default": "127.0.0.1",
-          "description": "Host address for the MCP server"
+          "default": "0.0.0.0",
+          "description": "Host address for the RooCode MCP server"
         },
-        "vscode-mcp-server.defaultEnabled": {
+        "roocode-mcp-server.defaultEnabled": {
           "type": "boolean",
           "default": false,
-          "description": "Whether the MCP server should be enabled by default on VS Code startup"
+          "description": "Whether the RooCode MCP server should be enabled by default on VS Code startup"
         },
-        "vscode-mcp-server.enabledTools": {
+        "roocode-mcp-server.enabledTools": {
           "type": "object",
           "default": {
-            "file": true,
-            "edit": true,
-            "shell": true,
-            "diagnostics": true,
-            "symbol": true
+            "roocode": true
           },
           "properties": {
-            "file": {
+            "roocode": {
               "type": "boolean",
-              "description": "Enable file operations tools (read, write, list files)"
-            },
-            "edit": {
-              "type": "boolean",
-              "description": "Enable file editing tools (create, edit, delete files)"
-            },
-            "shell": {
-              "type": "boolean",
-              "description": "Enable shell command execution tools"
-            },
-            "diagnostics": {
-              "type": "boolean",
-              "description": "Enable VS Code diagnostics tools"
-            },
-            "symbol": {
-              "type": "boolean",
-              "description": "Enable code symbol and structure analysis tools"
+              "description": "Enable RooCode integration tools"
             }
           },
-          "description": "Configure which MCP tools are enabled"
+          "description": "Configure which RooCode MCP tools are enabled"
         }
       }
     },
     "commands": [
       {
-        "command": "vscode-mcp-server.helloWorld",
-        "title": "Hello World"
+        "command": "roocode-mcp-server.showServerInfo",
+        "title": "Show RooCode MCP Server Information"
       },
       {
-        "command": "vscode-mcp-server.showServerInfo",
-        "title": "Show MCP Server Information"
-      },
-      {
-        "command": "vscode-mcp-server.toggleServer",
-        "title": "Toggle MCP Server"
+        "command": "roocode-mcp-server.toggleServer",
+        "title": "Toggle RooCode MCP Server"
       }
     ]
   },

@@ -1,0 +1,1 @@
+{"mcpServers":{"roocode-mcp-server":{"type":"sse","url":"http://localhost:4000/mcp","disabled":true,"alwaysAllow":["roocode_start_task","roocode_send_message","roocode_approve_action","roocode_deny_action","roocode_check_status","roocode_initialize"]}}}
