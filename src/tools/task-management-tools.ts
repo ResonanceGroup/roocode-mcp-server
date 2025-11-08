@@ -8,10 +8,17 @@ import { logger } from '../utils/logger';
  * RooCode API interface based on official documentation
  */
 interface RooCodeAPI {
-    startNewTask(initialMessage: string, images?: string[]): Promise<void>;
-    sendMessage(message: string): Promise<void>;
+    startNewTask(params: {
+        configuration: any;
+        text?: string;
+        images?: string[];
+        newTab?: boolean
+    }): Promise<string>;
+    sendMessage(text?: string, images?: string[]): Promise<void>;
     pressPrimaryButton(): Promise<void>;
     pressSecondaryButton(): Promise<void>;
+    getConfiguration(): any;
+    setConfiguration(config: any): Promise<void>;
 }
 
 /**
@@ -32,7 +39,7 @@ export class RooCodeTaskAPI {
             logger.info('[RooCodeTaskAPI] Attempting to discover RooCode extension...');
 
             // Try to get the RooCode extension
-            this.extension = vscode.extensions.getExtension<RooCodeAPI>('RooVeterinaryInc.roo-cline');
+            this.extension = vscode.extensions.getExtension<RooCodeAPI>('rooveterinaryinc.roo-cline');
 
             if (!this.extension) {
                 logger.warn('[RooCodeTaskAPI] RooCode extension not found - please ensure RooCode is installed');
@@ -92,7 +99,18 @@ export class RooCodeTaskAPI {
 
         try {
             logger.info(`[RooCodeTaskAPI] Starting new task with message: "${initialMessage.substring(0, 50)}..."`);
-            await this.extension.exports.startNewTask(initialMessage, images);
+            
+            // Get current RooCode configuration
+            const configuration = this.extension.exports.getConfiguration();
+            
+            // Call startNewTask with correct parameter format
+            await this.extension.exports.startNewTask({
+                configuration,
+                text: initialMessage,
+                images,
+                newTab: false
+            });
+            
             logger.info('[RooCodeTaskAPI] Task started successfully');
         } catch (error) {
             logger.error(`[RooCodeTaskAPI] Error starting task: ${error instanceof Error ? error.message : String(error)}`);

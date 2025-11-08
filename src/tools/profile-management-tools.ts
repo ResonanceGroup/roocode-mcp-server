@@ -19,7 +19,7 @@ export class RooCodeProfileAPI {
      */
     public async initialize(): Promise<boolean> {
         try {
-            this.extension = vscode.extensions.getExtension('RooVeterinaryInc.roo-cline');
+            this.extension = vscode.extensions.getExtension('rooveterinaryinc.roo-cline');
 
             if (!this.extension) {
                 logger.warn('[RooCodeProfileAPI] RooCode extension not found');

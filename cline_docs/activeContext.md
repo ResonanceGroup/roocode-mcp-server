@@ -1,54 +1,103 @@
-# RooCode MCP Server - Active Debugging Context
+# Active Context
 
-## Current Status
-Debugging MCP protocol compliance issues causing 400 errors when RooCode attempts to connect.
+## Current Work
 
-## Key Findings from Research
-1. **Root Cause Identified**: Critical MCP Protocol Violations in server implementation
-2. **Main Issues**:
-   - Shared transport instance instead of per-session transports
-   - Missing session management (no session map)
-   - No initialize request detection
-   - Incorrect connection sequence (transport connected at startup)
-   - Missing lifecycle callbacks
-   - Incorrect SSE endpoint handling
+**Status**: Core RooCode MCP Server integration is COMPLETE and WORKING! 🎉
 
-## Research Agent Findings
-The research agent identified 8 critical protocol violations:
-1. Shared Transport Instance (breaks session isolation)
-2. Missing Session Map (no tracking of multiple client sessions)
-3. No Initialize Detection (cannot distinguish initialization from subsequent requests)
-4. Premature Connection (transport connected at startup instead of per-session)
-5. Incorrect SSE Endpoint (separate `/mcp/sse` route instead of GET `/mcp`)
-6. No Session Lifecycle (missing `onsessioninitialized`/`onclose` callbacks)
-7. No Header Validation (missing required header checks)
-8. Memory Leaks (closed sessions not removed from memory)
+Successfully implemented and debugged the MCP server that exposes RooCode extension APIs through MCP protocol, enabling voice-controlled and programmatic interaction with RooCode.
 
-## Implemented Fixes
-1. **Session Management**: Added `transports` Map to track per-session transports
-2. **Per-Session Transports**: Each client session now gets its own transport instance
-3. **Proper Route Handling**: Single `/mcp` endpoint handles both POST (RPC) and GET (SSE) methods
-4. **Session Lifecycle**: Added proper cleanup with transport.close() override
-5. **CORS Support**: Added proper CORS headers for cross-origin requests
-6. **Session ID Tracking**: Client can provide session ID via `x-session-id` header
+### Latest Activity
 
-## Next Steps
-- Test the updated server with RooCode client
-- Verify that the 400 error is resolved
-- Confirm proper session management works
-- Test multiple concurrent client connections
+**Major Milestone Achieved**: Fixed critical API parameter bug and verified end-to-end integration
+- ✅ Diagnosed "Either historyItem or task/images must be provided" error
+- ✅ Discovered RooCode's actual API signature from source code
+- ✅ Updated API interface and implementation 
+- ✅ Successfully tested `roocode_start_task` tool - task appeared in RooCode!
 
-## Changes Made to Server Implementation
+### Recent Changes
 
-### Before (Broken):
-- Single shared `transport` instance
-- Separate `/mcp` and `/mcp/sse` endpoints
-- Transport connected at startup
-- No session management
+**Critical Bug Fix** (lines 7-19, 88-111 in `task-management-tools.ts`):
+```typescript
+// OLD (WRONG):
+await this.extension.exports.startNewTask(initialMessage, images)
 
-### After (Fixed):
-- `transports` Map for session tracking
-- Single `/mcp` endpoint handles all methods
-- Transports created per session
-- Proper session cleanup
-- Session ID header support
+// NEW (CORRECT):
+const configuration = this.extension.exports.getConfiguration()
+await this.extension.exports.startNewTask({
+    configuration,
+    text: initialMessage,
+    images,
+    newTab: false
+})
+```
+
+**Key Discoveries**:
+1. RooCode API uses object parameters, not positional arguments
+2. Configuration parameter is REQUIRED for all tasks
+3. Must fetch current settings via `getConfiguration()` before starting tasks
+4. Extension ID is case-sensitive: `'rooveterinaryinc.roo-cline'`
+
+### Debugging Journey
+
+**Timeline of Resolution**:
+1. ✅ Fixed MCP transport type: SSE → Streamable HTTP
+2. ✅ Fixed extension ID case sensitivity 
+3. ✅ Implemented stateless transport pattern
+4. ✅ Discovered and analyzed RooCode source code at `A:\repos\RooCode-research\src`
+5. ✅ Found actual API signatures in `extension/api.ts`
+6. ✅ Updated our interface to match reality
+7. ✅ Successfully tested integration
+
+### Working Features
+
+**Fully Functional MCP Tools**:
+- `roocode_initialize` - Connect to RooCode extension
+- `roocode_check_status` - Verify readiness
+- `roocode_start_task` - Start new coding tasks ✅ **VERIFIED WORKING**
+- `roocode_send_message` - Send messages to active tasks
+- `roocode_approve_action` - Approve interactive prompts
+- `roocode_deny_action` - Deny interactive prompts
+
+### Next Steps
+
+**Phase 4 - Event Streaming** (NEXT PRIORITY):
+1. Investigate if RooCode's EventEmitter API is accessible through extension exports
+2. Review RooCode's event types from source code:
+   - `TaskCreated`, `TaskStarted`, `TaskCompleted`, `TaskAborted`
+   - `TaskInteractive` (waiting for approval)
+   - `TaskActive`, `TaskIdle`, `TaskResumable`
+   - `Message` (task updates)
+3. Determine if we can subscribe to these events via MCP
+4. Implement event streaming if API supports it, or document limitations
+
+**Before Event Work**:
+- Update Memory Bank (IN PROGRESS)
+- Commit and push changes to GitHub
+- Document event investigation findings
+
+**Future Enhancements** (Optional):
+- Add Configuration/Profile management tools (`getConfiguration`, `setConfiguration`, etc.)
+- Implement proper error handling for edge cases
+- Add event-driven status notifications
+- Create comprehensive documentation
+
+### Current Understanding
+
+**Architecture**:
+```
+MCP Client (Window B)
+    ↓
+HTTP POST → localhost:4000/mcp
+    ↓  
+Stateless Transport (enableJsonResponse: true)
+    ↓
+RooCode Extension APIs (Window A)
+    ↓
+RooCode Task Execution
+```
+
+**Key Technical Decisions**:
+- Stateless transport: New transport per request
+- Configuration management: Use current RooCode settings
+- Extension discovery: Case-sensitive ID lookup
+- API format: Object parameters with configuration injection

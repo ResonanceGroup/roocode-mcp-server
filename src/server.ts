@@ -1,5 +1,4 @@
 import express from "express";
-import * as vscode from 'vscode';
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Server } from 'http';
@@ -7,7 +6,6 @@ import { logger } from './utils/logger';
 import { registerTaskManagementTools } from './tools/task-management-tools';
 import { registerConfigurationTools } from './tools/configuration-tools';
 import { registerProfileManagementTools } from './tools/profile-management-tools';
-import { EventStreamingServer } from './tools/event-streaming-server';
 
 export interface ToolConfiguration {
     roocode: boolean;
@@ -20,9 +18,6 @@ export class MCPServer {
     private port: number;
     private host: string;
     private toolConfig: ToolConfiguration;
-    private eventStreamingServer: EventStreamingServer;
-    private transports: Map<string, StreamableHTTPServerTransport>;
-    private sessionIdGenerator: () => string;
 
     constructor(port: number = 4000, host: string = '0.0.0.0', toolConfig?: ToolConfiguration) {
         this.port = port;
@@ -32,14 +27,10 @@ export class MCPServer {
         };
         this.app = express();
         
-        // Don't use express.json() - let StreamableHTTPServerTransport handle body parsing
-        // The transport needs access to the raw request stream
-        this.app.use(express.raw({ type: 'application/json', limit: '10mb' }));
+        // Use express.json() as per official SDK examples
+        this.app.use(express.json());
 
-        // Initialize event streaming server
-        this.eventStreamingServer = new EventStreamingServer();
-
-        // Initialize MCP Server
+        // Initialize MCP Server (reused across requests)
         this.server = new McpServer({
             name: "roocode-mcp-server",
             version: "1.0.0",
@@ -52,12 +43,8 @@ export class MCPServer {
             }
         });
 
-        // Initialize session management
-        this.transports = new Map<string, StreamableHTTPServerTransport>();
-        this.sessionIdGenerator = () => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
         this.setupRoutes();
-        this.setupEventHandlers();
+        // Note: setupEventHandlers() is called in start() after httpServer is created
     }
 
     public setupTools(): void {
@@ -75,116 +62,33 @@ export class MCPServer {
     }
 
     private setupRoutes(): void {
-        // Handle all MCP requests (POST for RPC, GET for SSE)
-        this.app.all('/mcp', async (req, res) => {
-            logger.info(`MCP Request received: ${req.method} ${req.url}`);
+        // Handle all MCP requests - following official SDK pattern
+        this.app.post('/mcp', async (req, res) => {
+            logger.info(`MCP POST request received`);
             
-            // Handle CORS preflight
-            if (req.method === 'OPTIONS') {
-                res.setHeader('Access-Control-Allow-Origin', '*');
-                res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-                res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, x-session-id');
-                res.status(204).end();
-                return;
-            }
-
+            // Set CORS headers
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
             try {
-                // Get session ID from header (for existing sessions) or generate new one
-                let sessionId = req.headers['x-session-id'] as string;
-                
-                // For POST requests, check if this is an initialize
-                if (req.method === 'POST') {
-                    const isInitialize = req.body &&
-                        typeof req.body === 'object' &&
-                        req.body.method === 'initialize';
-                    
-                    if (isInitialize) {
-                        // Generate new session ID for initialize
-                        sessionId = this.sessionIdGenerator();
-                        logger.info(`Initialize request received - creating new session: ${sessionId}`);
-                        
-                        // Create new transport for this session
-                        const transport = new StreamableHTTPServerTransport({
-                            sessionIdGenerator: () => sessionId
-                        });
-                        
-                        // Set up session cleanup
-                        const originalClose = transport.close.bind(transport);
-                        transport.close = async () => {
-                            logger.info(`Session closed: ${sessionId}`);
-                            this.transports.delete(sessionId);
-                            return originalClose();
-                        };
-                        
-                        // Connect the transport to the MCP server
-                        await this.server.connect(transport);
-                        this.transports.set(sessionId, transport);
-                        
-                        // Set session ID header for client
-                        res.setHeader('x-session-id', sessionId);
-                        
-                        // Handle the initialize request - parse body if it's a Buffer
-                        logger.info(`Processing initialize request for session: ${sessionId}`);
-                        const body = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : req.body;
-                        await transport.handleRequest(req, res, body);
-                        return;
-                    }
-                    
-                    // For non-initialize POST, require session ID
-                    if (!sessionId || !this.transports.has(sessionId)) {
-                        logger.warn(`POST request without valid session ID: ${sessionId}`);
-                        res.status(400).json({
-                            jsonrpc: '2.0',
-                            error: {
-                                code: -32000,
-                                message: 'Invalid session - must initialize first'
-                            },
-                            id: req.body?.id ?? null
-                        });
-                        return;
-                    }
-                    
-                    // Handle regular RPC request
-                    const transport = this.transports.get(sessionId)!;
-                    res.setHeader('x-session-id', sessionId);
-                    logger.info(`Handling RPC request for session: ${sessionId}`);
-                    const body = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : req.body;
-                    await transport.handleRequest(req, res, body);
-                    return;
-                }
-                
-                // For GET (SSE), require valid session
-                if (req.method === 'GET') {
-                    if (!sessionId || !this.transports.has(sessionId)) {
-                        logger.warn(`SSE request without valid session ID: ${sessionId}`);
-                        res.status(400).json({
-                            jsonrpc: '2.0',
-                            error: {
-                                code: -32000,
-                                message: 'Invalid session - must initialize first'
-                            },
-                            id: null
-                        });
-                        return;
-                    }
-                    
-                    // Handle SSE request
-                    const transport = this.transports.get(sessionId)!;
-                    res.setHeader('x-session-id', sessionId);
-                    logger.info(`Handling SSE request for session: ${sessionId}`);
-                    await transport.handleRequest(req, res, undefined);
-                    return;
-                }
-                
-                // Unsupported method
-                res.status(405).json({
-                    jsonrpc: '2.0',
-                    error: {
-                        code: -32000,
-                        message: 'Method not allowed'
-                    },
-                    id: null
+                // Create a new transport for each request (stateless pattern from SDK examples)
+                const transport = new StreamableHTTPServerTransport({
+                    sessionIdGenerator: undefined,  // undefined for stateless operation
+                    enableJsonResponse: true  // CRITICAL: Required for proper MCP protocol handling
                 });
+                
+                // Clean up transport on response end
+                res.on('close', () => {
+                    transport.close();
+                });
+                
+                // Connect the transport to the server
+                await this.server.connect(transport);
+                
+                // Let the transport handle the request - pass req.body as third parameter
+                await transport.handleRequest(req, res, req.body);
+                
             } catch (error) {
                 logger.error(`Error handling MCP request: ${error instanceof Error ? error.message : String(error)}`);
                 if (!res.headersSent) {
@@ -198,6 +102,14 @@ export class MCPServer {
                     });
                 }
             }
+        });
+        
+        // Handle OPTIONS preflight requests
+        this.app.options('/mcp', (req, res) => {
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            res.status(204).end();
         });
     }
 
@@ -223,19 +135,22 @@ export class MCPServer {
             logger.info('[MCPServer.start] Starting MCP server');
             const startTime = Date.now();
 
-            // No need to connect transport at startup - transports are created per session
-            logger.info('[MCPServer.start] Server ready for sessions');
+            // No need to connect transport at startup - transports are created per request
+            logger.info('[MCPServer.start] Server ready for requests');
 
             // Start HTTP server
             logger.info('[MCPServer.start] Starting HTTP server');
             const httpServerStartTime = Date.now();
             
             return new Promise((resolve) => {
-                // Bind to localhost only for security
+                // Bind to specified host
                 this.httpServer = this.app.listen(this.port, this.host, () => {
                     const httpStartTime = Date.now() - httpServerStartTime;
                     logger.info(`[MCPServer.start] HTTP Server started (took ${httpStartTime}ms)`);
                     logger.info(`MCP Server listening on ${this.host}:${this.port}`);
+                    
+                    // Setup event handlers after server is created
+                    this.setupEventHandlers();
                     
                     const totalTime = Date.now() - startTime;
                     logger.info(`[MCPServer.start] Server startup complete (total: ${totalTime}ms)`);
@@ -285,22 +200,7 @@ export class MCPServer {
                 ]);
             }
 
-            // Rest of the shutdown process...
-            logger.info('[MCPServer.stop] Closing transport');
-            const transportCloseStart = Date.now();
-            // Close all transports
-            for (const [sessionId, transport] of this.transports) {
-                try {
-                    await transport.close();
-                    logger.info(`[MCPServer.stop] Transport closed for session ${sessionId}`);
-                } catch (error) {
-                    logger.error(`[MCPServer.stop] Error closing transport for session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
-                }
-            }
-            this.transports.clear();
-            const transportCloseTime = Date.now() - transportCloseStart;
-            logger.info(`[MCPServer.stop] Transport closed (took ${transportCloseTime}ms)`);
-            
+            // Close MCP server (transports are auto-cleaned per-request with 'close' event)
             logger.info('[MCPServer.stop] Closing MCP server');
             const serverCloseStart = Date.now();
             await this.server.close();

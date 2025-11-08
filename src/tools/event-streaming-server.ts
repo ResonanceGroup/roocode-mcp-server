@@ -25,7 +25,7 @@ export class EventStreamingServer {
     private async initializeRooCodeEventForwarding(): Promise<void> {
         try {
             // Get RooCode extension
-            this.rooCodeExtension = vscode.extensions.getExtension('RooVeterinaryInc.roo-cline');
+            this.rooCodeExtension = vscode.extensions.getExtension('rooveterinaryinc.roo-cline');
 
             if (!this.rooCodeExtension) {
                 logger.warn('[EventStreamingServer] RooCode extension not found');
