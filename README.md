@@ -1,26 +1,27 @@
 # RooCode MCP Server
 
-A Model Context Protocol (MCP) server that exposes [RooCode](https://github.com/RooVetGit/Roo-Cline) extension APIs, enabling voice-controlled and programmatic interaction with RooCode's AI coding assistant directly from MCP-compatible clients.
+A Model Context Protocol (MCP) server that exposes [RooCode](https://github.com/RooVetGit/Roo-Cline) extension APIs as MCP tools, enabling MCP clients to programmatically control RooCode's AI coding assistant.
 
 ## What is This?
 
-RooCode MCP Server bridges the gap between MCP clients (like voice agents, automation tools, or other AI assistants) and the RooCode VSCode extension. It allows you to:
+This server acts as a bridge between the RooCode VSCode extension and any MCP-compatible client. It exposes RooCode's functionality through standardized MCP tools that allow clients to:
 
-- 🎙️ **Voice control** your RooCode coding tasks
-- 🤖 **Programmatically** start, monitor, and interact with RooCode
-- 📊 **Track task status** in real-time with MCP notifications or polling
+- 🤖 **Control RooCode programmatically** - start tasks, send messages, approve actions
+- 📊 **Monitor task status** in real-time with MCP notifications or polling
 - ⚙️ **Manage configurations** and API provider profiles remotely
-- 🔄 **Integrate** RooCode into larger automation workflows
+- 🔄 **Integrate** RooCode into automation workflows and other tools
 
 ## Why Does This Exist?
 
-RooCode is a powerful AI coding assistant for VSCode, but it lacks programmatic control. This MCP server solves that by:
+**Primary motivation:** To enable voice-controlled coding workflows.
 
-1. **Exposing RooCode's public APIs** through the standardized MCP protocol
-2. **Enabling voice control** - speak commands to start tasks, send messages, approve actions
-3. **Providing real-time updates** via MCP-native notifications
-4. **Offering polling fallback** for clients that don't support SSE notifications
-5. **Managing multiple profiles** programmatically for different API providers
+RooCode is a powerful AI coding assistant, but it had no programmatic interface. By exposing RooCode's APIs through MCP, this server makes it possible for:
+
+1. **Voice agents** to control RooCode through natural language (the main reason this was built)
+2. **Automation tools** to integrate RooCode into CI/CD pipelines or development workflows
+3. **Other AI assistants** to leverage RooCode's capabilities programmatically
+
+**Important:** This MCP server provides the bridge - it doesn't do voice control itself. Voice control is implemented in a separate voice agent client that connects to this server via MCP.
 
 ## Installation
 
