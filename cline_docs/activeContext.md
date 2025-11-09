@@ -2,17 +2,18 @@
 
 ## Current Work
 
-**Status**: Core RooCode MCP Server integration is COMPLETE and WORKING! 🎉
-
-Successfully implemented and debugged the MCP server that exposes RooCode extension APIs through MCP protocol, enabling voice-controlled and programmatic interaction with RooCode.
+**Status**: Refactoring event notifications to be MCP-compliant
 
 ### Latest Activity
 
-**Major Milestone Achieved**: Fixed critical API parameter bug and verified end-to-end integration
-- ✅ Diagnosed "Either historyItem or task/images must be provided" error
-- ✅ Discovered RooCode's actual API signature from source code
-- ✅ Updated API interface and implementation 
-- ✅ Successfully tested `roocode_start_task` tool - task appeared in RooCode!
+**Current Focus**: Converting custom SSE event streaming to MCP-native notifications
+- ✅ Core MCP server is WORKING (task creation, messaging, approval/deny)
+- ✅ Built custom SSE event streaming server (EventStreamingServer class)
+- ✅ Subscribed to all RooCode events (taskInteractive, taskCompleted, message, etc.)
+- 🔄 **NOW**: Need to replace custom SSE with MCP protocol notifications
+- 🎯 **Goal**: Make voice interface fully MCP-compliant
+
+**Reason for Change**: User wants voice interface to be MCP-compliant, so we need to use MCP's built-in notification system instead of custom SSE endpoint
 
 ### Recent Changes
 
@@ -60,20 +61,23 @@ await this.extension.exports.startNewTask({
 
 ### Next Steps
 
-**Phase 4 - Event Streaming** (NEXT PRIORITY):
-1. Investigate if RooCode's EventEmitter API is accessible through extension exports
-2. Review RooCode's event types from source code:
-   - `TaskCreated`, `TaskStarted`, `TaskCompleted`, `TaskAborted`
-   - `TaskInteractive` (waiting for approval)
-   - `TaskActive`, `TaskIdle`, `TaskResumable`
-   - `Message` (task updates)
-3. Determine if we can subscribe to these events via MCP
-4. Implement event streaming if API supports it, or document limitations
+**IMMEDIATE PRIORITY - MCP-Compliant Notifications**:
+1. ✅ RooCode EventEmitter API is accessible and working
+2. 🔄 **BLOCKED**: Need to research exact MCP SDK API for sending notifications
+3. Deploy research agent to find:
+   - How to send notifications through StreamableHTTPServerTransport
+   - Proper MCP notification format/structure
+   - Examples from other MCP servers (especially logging notifications)
+   - Whether we use `server.notification()` or `transport.send()`
+4. Implement MCP notification system based on research findings
+5. Remove custom EventStreamingServer class
+6. Test with MCP-compliant client
 
-**Before Event Work**:
-- Update Memory Bank (IN PROGRESS)
-- Commit and push changes to GitHub
-- Document event investigation findings
+**Research Questions for Agent**:
+- What's the correct API for sending MCP notifications from a server?
+- How do we track active transport connections that support SSE?
+- What's the notification message format per MCP protocol?
+- Are there code examples in @modelcontextprotocol/sdk?
 
 **Future Enhancements** (Optional):
 - Add Configuration/Profile management tools (`getConfiguration`, `setConfiguration`, etc.)

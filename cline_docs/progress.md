@@ -33,7 +33,8 @@
 - [x] Verified MCP protocol compliance
 - [x] Handled edge cases (extension unavailable)
 - [x] Refined responses for clarity and usability
-- [ ] **Event Streaming** - Real-time task status updates (NEXT)
+- [x] Built custom SSE event streaming server
+- [ ] **MCP-Native Notifications** - Refactor to use MCP protocol notifications (IN PROGRESS)
 
 ## Current Blockers
 
@@ -43,7 +44,7 @@
 3. ~~API Parameter Format Mismatch~~ → Fixed: Object parameters with configuration
 
 **ACTIVE**:
-- **Event Streaming**: Need to investigate if RooCode's EventEmitter API is accessible
+- **MCP Notification Implementation**: Need to research exact MCP SDK API for sending notifications through transports
 
 ## What Works
 
@@ -115,7 +116,12 @@
 ## Next Immediate Steps
 
 1. ✅ Update Memory Bank documentation
-2. **⏳ Commit and push changes to GitHub**
-3. **⏳ Investigate RooCode event streaming support**
-4. Implement event streaming if API supports it
-5. Document findings and limitations
+2. **⏳ Deploy research agent to investigate MCP notification API**
+   - How to send notifications from MCP server
+   - StreamableHTTPServerTransport SSE capabilities
+   - Notification message format per MCP spec
+   - Code examples from @modelcontextprotocol/sdk
+3. **⏳ Implement MCP-native notifications** based on research
+4. **⏳ Remove custom EventStreamingServer** once MCP notifications working
+5. **⏳ Test with MCP-compliant client**
+6. Commit and push final implementation

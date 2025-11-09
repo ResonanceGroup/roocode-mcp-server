@@ -6,6 +6,7 @@ import { logger } from './utils/logger';
 import { registerTaskManagementTools } from './tools/task-management-tools';
 import { registerConfigurationTools } from './tools/configuration-tools';
 import { registerProfileManagementTools } from './tools/profile-management-tools';
+import { EventStreamingServer } from './tools/event-streaming-server';
 
 export interface ToolConfiguration {
     roocode: boolean;
@@ -18,6 +19,7 @@ export class MCPServer {
     private port: number;
     private host: string;
     private toolConfig: ToolConfiguration;
+    private eventStreamingServer?: EventStreamingServer;
 
     constructor(port: number = 4000, host: string = '0.0.0.0', toolConfig?: ToolConfiguration) {
         this.port = port;
@@ -44,6 +46,7 @@ export class MCPServer {
         });
 
         this.setupRoutes();
+        this.setupEventStreaming();
         // Note: setupEventHandlers() is called in start() after httpServer is created
     }
 
@@ -111,6 +114,20 @@ export class MCPServer {
             res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
             res.status(204).end();
         });
+    }
+
+    private setupEventStreaming(): void {
+        logger.info('[MCPServer] Initializing event streaming server');
+        try {
+            this.eventStreamingServer = new EventStreamingServer();
+            
+            // Mount event streaming routes onto main app
+            this.app.use(this.eventStreamingServer.getApp());
+            
+            logger.info('[MCPServer] Event streaming server initialized successfully');
+        } catch (error) {
+            logger.error(`[MCPServer] Failed to initialize event streaming: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     private setupEventHandlers(): void {

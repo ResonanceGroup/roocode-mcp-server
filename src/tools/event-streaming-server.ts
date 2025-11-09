@@ -42,21 +42,37 @@ export class EventStreamingServer {
             if (this.rooCodeExtension.exports && this.rooCodeExtension.exports.on) {
                 const eventEmitter = this.rooCodeExtension.exports;
 
-                // Common RooCode events to forward
+                // RooCode events to forward (from @roo-code/types RooCodeEventName enum)
+                // Using actual event names from RooCode's EventEmitter API
                 const eventsToForward = [
-                    'taskCreated',
-                    'taskStarted',
-                    'taskCompleted',
-                    'taskCancelled',
-                    'messageReceived',
-                    'messageSent',
-                    'errorOccurred',
-                    'statusChanged'
+                    // Task Lifecycle (CRITICAL for voice control)
+                    'taskCreated',      // When new task is created
+                    'taskStarted',      // When task execution begins
+                    'taskCompleted',    // When task finishes (includes token/tool usage)
+                    'taskAborted',      // When task is cancelled
+                    
+                    // Task State (CRITICAL for knowing when to interact)
+                    'taskInteractive',  // When waiting for user approval/input ⭐
+                    'taskActive',       // Task is actively running
+                    'taskIdle',         // Task is idle
+                    'taskResumable',    // Task can be resumed
+                    
+                    // Task Focus
+                    'taskFocused',      // Task becomes focused
+                    'taskUnfocused',    // Task loses focus
+                    
+                    // Task Updates
+                    'message',          // Real-time task message updates
+                    'taskModeSwitched', // When task switches modes
+                    
+                    // Task Analytics
+                    'taskTokenUsageUpdated', // Token usage updates
+                    'taskToolFailed',        // When a tool fails
                 ];
 
                 eventsToForward.forEach(eventName => {
-                    eventEmitter.on(eventName, (data: any) => {
-                        this.forwardEventToClients(eventName, data);
+                    eventEmitter.on(eventName, (...args: any[]) => {
+                        this.forwardEventToClients(eventName, args);
                     });
                     logger.info(`[EventStreamingServer] Listening for RooCode event: ${eventName}`);
                 });
