@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from 'zod';
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { logger } from '../utils/logger';
+import { EventStreamingServer } from './event-streaming-server';
 
 /**
  * RooCode API interface based on official documentation
@@ -190,7 +191,7 @@ const rooCodeTaskAPI = new RooCodeTaskAPI();
 /**
  * Registers RooCode task management MCP tools with the server
  */
-export function registerTaskManagementTools(server: McpServer): void {
+export function registerTaskManagementTools(server: McpServer, eventStreamingServer?: EventStreamingServer): void {
     // Initialize RooCode tool
     server.tool(
         'roocode_initialize',
@@ -351,6 +352,81 @@ export function registerTaskManagementTools(server: McpServer): void {
                         {
                             type: 'text',
                             text: 'Action denied successfully'
+                        }
+                    ]
+                };
+                return toolResult;
+            } catch (error) {
+                throw error;
+            }
+        }
+    );
+
+    // Poll task state tool - for clients that don't support SSE
+    server.tool(
+        'roocode_poll_task_state',
+        `Poll the current state of RooCode tasks.
+
+        Use this to retrieve task status and recent messages for clients that cannot use SSE notifications.
+        Returns the current status (active, interactive, idle, completed, aborted) and recent messages.
+
+        Parameters:
+        - taskId: Optional task ID to poll. If omitted, returns state for all tasks.`,
+        {
+            taskId: z.string().optional().describe('Task ID to poll (omit for all tasks)')
+        },
+        async ({ taskId }): Promise<CallToolResult> => {
+            try {
+                if (!eventStreamingServer) {
+                    throw new Error('Event streaming is not available');
+                }
+
+                const state = eventStreamingServer.getTaskState(taskId);
+
+                // Format response based on whether we have single task or all tasks
+                let responseText: string;
+                
+                if (state instanceof Map) {
+                    // All tasks
+                    if (state.size === 0) {
+                        responseText = 'No active tasks found';
+                    } else {
+                        const taskStates = Array.from(state.entries()).map(([id, taskState]) => {
+                            const messageCount = taskState.messages.length;
+                            const recentMessages = taskState.messages.slice(-5).map(m =>
+                                `  - [${m.timestamp}] ${JSON.stringify(m.content)}`
+                            ).join('\n');
+                            
+                            return `Task: ${id}\n` +
+                                   `Status: ${taskState.status}\n` +
+                                   `Last Update: ${taskState.lastUpdate}\n` +
+                                   `Messages (${messageCount}, showing last 5):\n${recentMessages || '  (none)'}`;
+                        });
+                        responseText = taskStates.join('\n\n');
+                    }
+                } else if (state) {
+                    // Single task found
+                    const messageCount = state.messages.length;
+                    const recentMessages = state.messages.slice(-5).map(m =>
+                        `  - [${m.timestamp}] ${JSON.stringify(m.content)}`
+                    ).join('\n');
+                    
+                    responseText = `Task: ${state.taskId}\n` +
+                                   `Status: ${state.status}\n` +
+                                   `Last Update: ${state.lastUpdate}\n` +
+                                   `Messages (${messageCount}, showing last 5):\n${recentMessages || '  (none)'}`;
+                } else {
+                    // No state found for requested task
+                    responseText = taskId
+                        ? `No state found for task: ${taskId}`
+                        : 'No active tasks found';
+                }
+
+                const toolResult: CallToolResult = {
+                    content: [
+                        {
+                            type: 'text',
+                            text: responseText
                         }
                     ]
                 };

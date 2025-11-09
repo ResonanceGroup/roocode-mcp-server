@@ -1,17 +1,1 @@
-{
-  "mcpServers": {
-    "roocode-mcp-server": {
-      "type": "streamable-http",
-      "url": "http://localhost:4000/mcp",
-      "disabled": false,
-      "alwaysAllow": [
-        "roocode_start_task",
-        "roocode_send_message",
-        "roocode_approve_action",
-        "roocode_deny_action",
-        "roocode_check_status",
-        "roocode_initialize"
-      ]
-    }
-  }
-}
+{"mcpServers":{"roocode-mcp-server":{"type":"streamable-http","url":"http://localhost:4000/mcp","disabled":false,"alwaysAllow":["roocode_start_task","roocode_send_message","roocode_approve_action","roocode_deny_action","roocode_check_status","roocode_initialize","roocode_poll_task_state"]}}}

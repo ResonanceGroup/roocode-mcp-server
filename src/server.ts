@@ -57,7 +57,7 @@ export class MCPServer {
 
         // Register RooCode tools if enabled
         if (this.toolConfig.roocode) {
-            registerTaskManagementTools(this.server);
+            registerTaskManagementTools(this.server, this.eventStreamingServer);
             registerConfigurationTools(this.server);
             registerProfileManagementTools(this.server);
             logger.info('RooCode MCP tools registered successfully');
