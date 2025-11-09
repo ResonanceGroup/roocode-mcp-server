@@ -2,19 +2,19 @@
 
 ## Current Work
 
-**Status**: MCP-native notifications implemented ✅ - Ready to push and add polling support
+**Status**: Polling function implemented and tested ✅ - Production ready
 
 ### Latest Activity
 
-**Completed**: Successfully refactored event streaming to MCP-native notifications
-- ✅ Core MCP server is WORKING (task creation, messaging, approval/deny)
-- ✅ Refactored EventStreamingServer to use `server.sendLoggingMessage()`
-- ✅ Added session management with transport tracking
-- ✅ Implemented GET /mcp endpoint for SSE streams
-- ✅ Removed custom SSE routes - now fully MCP-compliant
-- 🎯 **ACHIEVED**: Voice interface is now fully MCP-compliant
+**Completed**: Successfully implemented and tested polling-based task state retrieval
+- ✅ MCP-native notifications working (using `server.sendLoggingMessage()`)
+- ✅ **NEW**: Polling function `roocode_poll_task_state` implemented
+- ✅ **NEW**: Event state caching in EventStreamingServer
+- ✅ **NEW**: Full end-to-end testing (empty state → task creation → interactive → completion)
+- ✅ **NEW**: README updated with RooCode-specific documentation
+- 🎯 **ACHIEVED**: Complete alternative to SSE for clients that need polling
 
-**Next**: User wants "polling based message function" to be implemented
+**Next**: Ready for production use
 
 ### Latest Implementation (MCP-Native Notifications)
 
@@ -78,24 +78,41 @@ await this.extension.exports.startNewTask({
 - `roocode_approve_action` - Approve interactive prompts
 - `roocode_deny_action` - Deny interactive prompts
 
+### Polling Function Implementation
+
+**New Tool**: `roocode_poll_task_state`
+- Queries cached task state from EventStreamingServer
+- Returns task status, last update timestamp, and recent messages (last 5)
+- Supports querying specific task by ID or all tasks
+- Perfect alternative to SSE notifications for polling-based clients
+
+**State Caching**:
+- EventStreamingServer now caches task states in a Map
+- Tracks status changes (started → active → interactive → completed/aborted)
+- Stores message history (max 50 per task, showing last 5 in responses)
+- Auto-cleanup of completed/aborted tasks after 30 seconds
+
+**Testing Verified**:
+1. ✅ Empty state returns "No active tasks found"
+2. ✅ Task creation detected with "started" status
+3. ✅ Status transitions tracked (started → active → interactive → completed)
+4. ✅ Interactive state details captured (tool requests, prompts)
+5. ✅ Approval/denial actions processed correctly
+6. ✅ Message history captured with timestamps
+
 ### Next Steps
 
-**IMMEDIATE PRIORITY**:
-1. ✅ MCP-native notifications implemented
-2. ⏳ **UPDATE MEMORY BANK** with current status
-3. ⏳ **COMMIT AND PUSH** changes to git
-4. ⏳ **IMPLEMENT POLLING-BASED MESSAGE FUNCTION** (user request - needs clarification)
-   - Question: What does "polling based message function" mean?
-   - Possibilities:
-     * A tool to poll for new messages from RooCode?
-     * A way to check task status periodically?
-     * Alternative to SSE for getting notifications?
+**Production Ready**:
+- ✅ All core features implemented
+- ✅ End-to-end testing complete
+- ✅ Documentation updated
+- ✅ Code committed to git (commit `8219553` and `8a0f256`)
 
 **Future Enhancements**:
-- Add Configuration/Profile management tools (`getConfiguration`, `setConfiguration`, etc.)
-- Implement proper error handling for edge cases
-- Add event-driven status notifications
-- Create comprehensive documentation
+- [ ] More comprehensive MCP notification testing
+- [ ] Enhanced error handling for edge cases
+- [ ] Performance optimization for large message histories
+- [ ] Extended test coverage
 
 ### Current Architecture
 

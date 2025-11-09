@@ -75,14 +75,24 @@
   - ✅ Event subscription implemented
   - ✅ Real-time task status updates via MCP notifications
   - ✅ Notifications when tasks are waiting for approval
-- [ ] **Polling-based message function** (User request - needs clarification)
+- [x] **Polling-based task state retrieval** ✅
+  - ✅ `roocode_poll_task_state` tool implemented
+  - ✅ Event state caching in EventStreamingServer
+  - ✅ Returns task status, timestamps, and recent messages
+  - ✅ End-to-end testing complete
 
-### Medium Priority  
-- [ ] Additional Configuration Tools
-  - `roocode_get_configuration` - Retrieve current settings
-  - `roocode_set_configuration` - Update settings
-  - `roocode_get_profiles` - List API profiles
-  - `roocode_set_active_profile` - Switch profiles
+### Medium Priority
+- [x] Additional Configuration Tools ✅
+  - ✅ `roocode_get_configuration` - Retrieve current settings
+  - ✅ `roocode_set_configuration` - Update settings
+  - ✅ `roocode_get_profiles` - List API profiles
+  - ✅ `roocode_create_profile` - Create new profile
+  - ✅ `roocode_update_profile` - Update existing profile
+  - ✅ `roocode_delete_profile` - Delete profile
+  - ✅ `roocode_get_active_profile` - Get active profile
+  - ✅ `roocode_set_active_profile` - Switch profiles
+  - ✅ `roocode_get_profile_entry` - Get specific profile details
+  - ✅ `roocode_upsert_profile` - Create or update profile
 
 ### Low Priority (Polish)
 - [ ] Comprehensive documentation
@@ -121,12 +131,20 @@
 5. **Comprehensive Debugging**: Systematic problem-solving through entire debugging journey
 6. **MCP-Native Notifications**: Fully compliant event streaming using MCP protocol
 
-## Next Immediate Steps
+## Completed Recent Work
 
 1. ✅ Update Memory Bank documentation
 2. ✅ Research MCP notification API
 3. ✅ Implement MCP-native notifications
 4. ✅ Refactor EventStreamingServer to use MCP protocol
-5. **⏳ Commit and push to git**
-6. **⏳ Implement polling-based message function** (user request)
-7. Test with MCP-compliant client
+5. ✅ Implement polling-based task state retrieval
+6. ✅ End-to-end testing of polling function
+7. ✅ Update README with RooCode-specific documentation
+8. ✅ Commit and push to git (commits `8219553`, `8a0f256`)
+
+## Next Steps
+
+- [ ] Additional MCP notification testing in production
+- [ ] Performance testing with multiple concurrent tasks
+- [ ] Extended error handling scenarios
+- [ ] Community feedback and iteration
